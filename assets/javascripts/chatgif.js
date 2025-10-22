@@ -38,10 +38,10 @@ export default apiInitializer("0.11.7", (api) => {
       gifButton.title = "Insert GIF";
       gifButton.type = "button";
 
-      // Insert GIF button before the emoji button
-      const emojiButton = composerElement.querySelector(".emoji-picker-trigger");
-      if (emojiButton) {
-        emojiButton.parentNode.insertBefore(gifButton, emojiButton);
+      // Insert GIF button to the right of the textarea
+      const textareaContainer = composerElement.querySelector(".chat-composer__input-container");
+      if (textareaContainer) {
+        textareaContainer.parentNode.insertBefore(gifButton, textareaContainer.nextSibling);
       }
 
       // Create GIF picker dropdown
