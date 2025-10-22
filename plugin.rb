@@ -4,8 +4,6 @@
 # authors: Your Name
 # url: https://github.com/your-repo/chatgif
 
-enabled_site_setting :chatgif_enabled
-
 register_asset "stylesheets/chatgif.scss"
 
 register_svg_icon "film"
