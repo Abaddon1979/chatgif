@@ -3,16 +3,17 @@ import { h } from "virtual-dom";
 import { createPopper } from "@popperjs/core";
 
 export default apiInitializer("0.11.7", (api) => {
-  const chatService = api.container.lookup("service:chat");
-  
-  if (!chatService) return;
-
+  // Add the GIF button directly to the chat composer
   api.modifyClass("component:chat-composer", {
     pluginId: "chatgif",
 
     didInsertElement() {
       this._super(...arguments);
-      this._setupGifPicker();
+      console.log("ChatGif: Composer inserted, setting up GIF picker");
+      // Use setTimeout to ensure DOM is fully rendered
+      setTimeout(() => {
+        this._setupGifPicker();
+      }, 100);
     },
 
     willDestroyElement() {
