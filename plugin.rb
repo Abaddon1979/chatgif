@@ -15,7 +15,6 @@ add_admin_route 'chatgif.title', 'chatgif'
 DiscoursePluginRegistry.serialized_current_user_fields << "chatgif_enabled"
 
 after_initialize do
-  SiteSetting.define_setting(:chatgif_tenor_api_key, "", type: :string)
   module ::ChatGif
     PLUGIN_NAME = "chatgif"
   end
