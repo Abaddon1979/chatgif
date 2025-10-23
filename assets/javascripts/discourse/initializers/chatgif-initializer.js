@@ -34,20 +34,69 @@ export default {
           preview.innerHTML = "";
           if (urls.length === 0) {
             preview.style.display = "none";
+            // remove padding shift when no preview
+            container.classList.remove("chatgif-has-preview");
+            container.style.removeProperty("--chatgif-preview-h");
             return;
           }
-          urls.slice(0, 3).forEach((u) => {
-            const img = document.createElement("img");
-            img.src = u;
-            img.alt = "preview";
-            img.loading = "lazy";
-            preview.appendChild(img);
+          // show only the first image URL as a full-width preview (match chat rendering size)
+          const u = urls[0];
+          const img = document.createElement("img");
+          img.src = u;
+          img.alt = "preview";
+          img.loading = "lazy";
+          // full width like chat; height auto
+          img.style.width = "100%";
+          img.style.height = "auto";
+          // when image loads, measure and push textarea content below so the link isn't visible
+          img.addEventListener("load", () => {
+            // ensure container is marked so CSS can apply padding
+            container.classList.add("chatgif-has-preview");
+            // give the browser a tick to layout the image
+            requestAnimationFrame(() => {
+              const h = preview.getBoundingClientRect().height || img.naturalHeight || 0;
+              container.style.setProperty("--chatgif-preview-h", `${Math.max(0, Math.round(h))}px`);
+            });
           });
-          preview.style.display = "flex";
+          preview.appendChild(img);
+          // show the overlay
+          preview.style.display = "block";
         };
 
         inputEl.addEventListener("input", updatePreview);
         inputEl.addEventListener("paste", () => setTimeout(updatePreview, 0));
+
+        // before sending, re-append hidden URL so message contains the image link
+        const appendHiddenUrlBeforeSend = () => {
+          const hidden = inputEl.dataset.chatgifHiddenUrl;
+          if (hidden && !inputEl.value.includes(hidden)) {
+            inputEl.value = `${inputEl.value} ${hidden}`.trim();
+            inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+            delete inputEl.dataset.chatgifHiddenUrl;
+          }
+          // clear preview state
+          preview.style.display = "none";
+          preview.innerHTML = "";
+          container.classList.remove("chatgif-has-preview");
+          container.style.removeProperty("--chatgif-preview-h");
+        };
+
+        // handle Enter to send (without Shift)
+        inputEl.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            appendHiddenUrlBeforeSend();
+          }
+        });
+
+        // handle clicking the send button
+        const composerRoot = container.closest(".chat-composer__inner-container");
+        const sendBtn = composerRoot?.querySelector(".chat-composer-button.-send");
+        if (sendBtn && !sendBtn.dataset.chatgifHooked) {
+          sendBtn.dataset.chatgifHooked = "true";
+          // mousedown runs before the click triggers send
+          sendBtn.addEventListener("mousedown", appendHiddenUrlBeforeSend);
+        }
+
         updatePreview();
       };
 
