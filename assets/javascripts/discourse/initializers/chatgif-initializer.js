@@ -84,6 +84,16 @@ export default {
             }
           }
         });
+        
+        // Also hide carets in messages where a link line has been hidden
+        const carets = Array.from(root.querySelectorAll?.('svg.d-icon-caret-right') || []);
+        carets.forEach((svg) => {
+          const msg = svg.closest('.chat-message, .chat-message-container, .chat-message-text, .message, .tc-message, .cooked');
+          if (msg && msg.querySelector('a.chatgif-hidden-onebox')) {
+            svg.style.display = 'none';
+            svg.classList.add('chatgif-hidden-caret');
+          }
+        });
       };
 
       // Run once at startup in case messages are already present
