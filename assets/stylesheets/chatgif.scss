@@ -205,7 +205,28 @@
   }
 }
 
-// Responsive adjustments
+/* Hide caret/expand icons in chat messages that contain images (e.g., GIFs) */
+.chat-message:has(img),
+.chat-message-container:has(img),
+.tc-message:has(img),
+.cooked:has(img) {
+  svg.d-icon-caret-right,
+  .d-icon-caret-right,
+  .toggle-expansion,
+  .onebox .toggle,
+  .onebox .expand,
+  .chat-message-expand,
+  .chat-message-caret {
+    display: none !important;
+  }
+}
+
+/* Fallback: also hide any caret we explicitly mark via JS */
+svg.chatgif-hidden-caret {
+  display: none !important;
+}
+
+/* Responsive adjustments */
 @media (max-width: 768px) {
   .chatgif-picker {
     max-width: 300px;
