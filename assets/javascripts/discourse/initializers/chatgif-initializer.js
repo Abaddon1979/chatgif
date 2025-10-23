@@ -188,8 +188,11 @@ export default {
         // before sending, re-append hidden URL so message contains the image link
         const appendHiddenUrlBeforeSend = (opts = {}) => {
           const { triggerSendClick = false, triggerKeyEnter = false } = opts;
-          // hide composer text during the brief send preparation so URL isn't visible
-          container.classList.add("chatgif-sending");
+          // guard against double-sends from re-entrant Enter/Click handling
+          if (inputEl.dataset.chatgifSendingNow === "1") return;
+          inputEl.dataset.chatgifSendingNow = "1";
+          // avoid visual flicker; do not alter composer text visibility during send
+          // container.classList.add("chatgif-sending");
           const hidden = inputEl.dataset.chatgifHiddenUrl;
           const urlRegex = /(https?:\/\/[^\s]+)/g;
           const isImageUrl = (u) => /\.(gif|png|jpe?g|webp)(\?.*)?$/i.test(u);
@@ -244,32 +247,67 @@ export default {
             });
           }
 
-          // Defer clearing preview so user doesn't see link text flicker before post
-          setTimeout(() => {
+          // Clear when composer empties (native send completed) or after a short fallback
+          const start = Date.now();
+          const clearAll = () => {
             delete inputEl.dataset.chatgifHiddenUrl;
             preview.style.display = "none";
             preview.innerHTML = "";
             container.classList.remove("chatgif-has-preview");
             container.classList.remove("chatgif-sending");
             container.style.removeProperty("--chatgif-preview-h");
-          }, 300);
+            // clear send suppression/guard flags
+            delete inputEl.dataset.chatgifSuppressEnter;
+            delete inputEl.dataset.chatgifSendingNow;
+          };
+          const iv = setInterval(() => {
+            if (!inputEl || (inputEl.value || "").trim() === "") {
+              clearInterval(iv);
+              clearAll();
+            } else if (Date.now() - start > 2500) {
+              // Fallback: ensure flags are cleared even if input didn't clear
+              clearInterval(iv);
+              clearAll();
+            }
+          }, 50);
         };
 
         // handle Enter to send (without Shift). Re-dispatch native Enter after injecting GIF URL.
         inputEl.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
-            const current = inputEl.value || "";
-            const urls = (current.match(urlRegex) || []).filter(isImageUrl);
-            if (inputEl.dataset.chatgifHiddenUrl || urls.length) {
-              e.preventDefault();
-              e.stopPropagation();
-              appendHiddenUrlBeforeSend({ triggerSendClick: false, triggerKeyEnter: true });
+          if (e.key === "Enter") {
+            // If this is our re-dispatched Enter, let native handler process it and exit early
+            if (inputEl.dataset.chatgifDispatchingEnter === "1") {
+              delete inputEl.dataset.chatgifDispatchingEnter;
+              delete inputEl.dataset.chatgifSuppressEnter;
               return;
             }
+            if (!e.shiftKey && !e.isComposing) {
+              const current = inputEl.value || "";
+              const urls = (current.match(urlRegex) || []).filter(isImageUrl);
+              if (inputEl.dataset.chatgifHiddenUrl || urls.length) {
+                if (inputEl.dataset.chatgifSendingNow === "1") return;
+                e.preventDefault();
+                e.stopPropagation();
+                // suppress native Enter from original keyup/keypress to avoid duplicate send
+                inputEl.dataset.chatgifSuppressEnter = "1";
+                appendHiddenUrlBeforeSend({ triggerSendClick: true, triggerKeyEnter: false });
+                return;
+              }
+            }
           }
-          if (e.key === "Enter" && inputEl.dataset.chatgifDispatchingEnter === "1") {
-            // allow the one re-dispatched Enter through
-            delete inputEl.dataset.chatgifDispatchingEnter;
+        });
+
+        // swallow native Enter keyup/keypress when we are preparing a GIF send to avoid duplicate posts
+        inputEl.addEventListener("keyup", (e) => {
+          if (e.key === "Enter" && inputEl.dataset.chatgifSuppressEnter === "1") {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        });
+        inputEl.addEventListener("keypress", (e) => {
+          if (e.key === "Enter" && inputEl.dataset.chatgifSuppressEnter === "1") {
+            e.preventDefault();
+            e.stopPropagation();
           }
         });
 
