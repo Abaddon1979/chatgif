@@ -15,13 +15,22 @@ export default {
           const composerElement = document.querySelector(".chat-composer__inner-container");
           if (!composerElement) return;
 
-          // Create GIF picker dropdown
+          // Create backdrop
+          let backdrop = document.getElementById("chatgif-backdrop");
+          if (!backdrop) {
+            backdrop = document.createElement("div");
+            backdrop.id = "chatgif-backdrop";
+            backdrop.className = "chatgif-backdrop";
+            document.body.appendChild(backdrop);
+          }
+
+          // Create GIF picker modal
           let gifPicker = document.getElementById("chatgif-picker");
           
           if (!gifPicker) {
             gifPicker = document.createElement("div");
             gifPicker.id = "chatgif-picker";
-            gifPicker.className = "chatgif-picker popup-menu";
+            gifPicker.className = "chatgif-picker";
             gifPicker.style.display = "none";
             gifPicker.innerHTML = `
               <div class="chatgif-search">
@@ -83,6 +92,7 @@ export default {
                       }
                       
                       gifPicker.style.display = "none";
+                      backdrop.classList.remove("visible");
                     });
 
                     resultsContainer.appendChild(gifElement);
@@ -101,19 +111,21 @@ export default {
               }
             });
 
-            // Close picker when clicking outside
-            document.addEventListener("click", (e) => {
-              if (!gifPicker.contains(e.target)) {
-                gifPicker.style.display = "none";
-              }
+            // Close picker when clicking backdrop
+            backdrop.addEventListener("click", () => {
+              gifPicker.style.display = "none";
+              backdrop.classList.remove("visible");
             });
           }
 
-          // Toggle picker visibility
+          // Toggle picker and backdrop visibility
           const isVisible = gifPicker.style.display === "block";
           gifPicker.style.display = isVisible ? "none" : "block";
           
-          if (!isVisible) {
+          if (isVisible) {
+            backdrop.classList.remove("visible");
+          } else {
+            backdrop.classList.add("visible");
             gifPicker.querySelector(".chatgif-search-input").focus();
           }
         }

@@ -21,6 +21,7 @@ after_initialize do
   
   class ChatGif::TenorController < ::ApplicationController
     requires_plugin ChatGif::PLUGIN_NAME
+    skip_before_action :verify_authenticity_token
 
     def search
       api_key = SiteSetting.chatgif_tenor_api_key
@@ -32,7 +33,7 @@ after_initialize do
       end
 
       url = "https://tenor.googleapis.com/v2/search"
-      params = {
+      query_params = {
         q: query,
         key: api_key,
         client_key: "discourse_chatgif",
@@ -41,12 +42,17 @@ after_initialize do
         contentfilter: "high"
       }
 
-      response = Excon.get(url, query: params)
-      
-      if response.status == 200
-        render json: response.body
-      else
-        render json: { error: "Failed to fetch GIFs" }, status: response.status
+      begin
+        response = Excon.get(url, query: query_params)
+        
+        if response.status == 200
+          data = JSON.parse(response.body)
+          render json: data
+        else
+          render json: { error: "Failed to fetch GIFs", status: response.status }, status: 500
+        end
+      rescue => e
+        render json: { error: "Error: #{e.message}" }, status: 500
       end
     end
   end
