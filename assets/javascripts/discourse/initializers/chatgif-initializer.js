@@ -112,7 +112,12 @@ export default {
           preview = document.createElement("div");
           preview.className = "chatgif-inline-preview";
           preview.style.display = "none";
-          container.appendChild(preview);
+          // place preview before the input so it appears above the text area
+          if (inputEl.nextSibling) {
+            container.insertBefore(preview, inputEl);
+          } else {
+            container.appendChild(preview);
+          }
         }
 
         const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -163,16 +168,10 @@ export default {
           img.style.maxWidth = "100%";
           // when image loads, measure and push textarea content below so the link isn't visible
           img.addEventListener("load", () => {
-            // ensure container is marked so CSS can apply padding
-            container.classList.add("chatgif-has-preview");
-            // give the browser a tick to layout the image
-            requestAnimationFrame(() => {
-              const h = Math.min(preview.getBoundingClientRect().height || img.naturalHeight || 0, 120);
-              container.style.setProperty("--chatgif-preview-h", `${Math.max(0, Math.round(h))}px`);
-            });
+            // inline preview uses normal flow; no overlay/padding adjustments needed
           });
           preview.appendChild(img);
-          // show the overlay
+          // show the preview
           preview.style.display = "block";
         };
 
@@ -180,7 +179,8 @@ export default {
         inputEl.addEventListener("paste", () => setTimeout(updatePreview, 0));
 
         // before sending, re-append hidden URL so message contains the image link
-        const appendHiddenUrlBeforeSend = () => {
+        const appendHiddenUrlBeforeSend = (opts = {}) => {
+          const { triggerSendClick = false } = opts;
           const hidden = inputEl.dataset.chatgifHiddenUrl;
           const urlRegex = /(https?:\/\/[^\s]+)/g;
           const isImageUrl = (u) => /\.(gif|png|jpe?g|webp)(\?.*)?$/i.test(u);
@@ -202,7 +202,7 @@ export default {
           // Immediately send to avoid a visible intermediate "link text" state in the composer
           const composerRootEl = container.closest(".chat-composer__inner-container");
           const sendBtnEl = composerRootEl?.querySelector(".chat-composer-button.-send");
-          if (sendBtnEl) {
+          if (triggerSendClick && sendBtnEl) {
             setTimeout(() => {
               try {
                 sendBtnEl.click();
@@ -220,10 +220,16 @@ export default {
           }, 300);
         };
 
-        // handle Enter to send (without Shift)
+        // handle Enter to send (without Shift). Prevent default only when we have a GIF URL to send.
         inputEl.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            appendHiddenUrlBeforeSend();
+          if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+            const current = inputEl.value || "";
+            const urls = (current.match(urlRegex) || []).filter(isImageUrl);
+            if (inputEl.dataset.chatgifHiddenUrl || urls.length) {
+              e.preventDefault();
+              e.stopPropagation();
+              appendHiddenUrlBeforeSend({ triggerSendClick: true });
+            }
           }
         });
 
@@ -233,7 +239,7 @@ export default {
         if (sendBtn && !sendBtn.dataset.chatgifHooked) {
           sendBtn.dataset.chatgifHooked = "true";
           // mousedown runs before the click triggers send
-          sendBtn.addEventListener("mousedown", appendHiddenUrlBeforeSend);
+          sendBtn.addEventListener("mousedown", () => appendHiddenUrlBeforeSend({ triggerSendClick: false }));
         }
 
         updatePreview();

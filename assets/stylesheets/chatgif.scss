@@ -154,36 +154,31 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-// Overlay mode to match chat size and visually hide the URL in the textarea
-.chat-composer__input-container.chatgif-has-preview {
-  position: relative;
+/* Inline preview stacked above input; no overlay positioning */
+.chat-composer__input-container {
+  display: flex;
+  flex-direction: column;
 }
 
-.chat-composer__input-container.chatgif-has-preview .chatgif-inline-preview {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  display: block;  // ensure visible when JS toggles class
-  gap: 0;
-  padding: 0;
-  border: 0;
-  pointer-events: none; // allow typing/caret through overlay
-  z-index: 2;
-  max-height: 120px; // cap inline preview size
-  overflow: hidden;  // prevent giant images from expanding the composer
+.chat-composer__input-container .chatgif-inline-preview {
+  position: static;
+  display: block;
+  max-height: 120px;
+  overflow: hidden;
+  pointer-events: auto;
+  margin: 0 0 6px 0;
 }
 
-.chat-composer__input-container.chatgif-has-preview .chatgif-inline-preview img {
-  width: 100%;
+.chat-composer__input-container .chatgif-inline-preview img {
+  width: auto;
+  max-width: 100%;
   height: auto;
   border-radius: 8px;
   box-shadow: none;
 }
 
-.chat-composer__input-container.chatgif-has-preview .chat-composer__input {
-  // push the text content below the overlaid image so the link isn't visible
-  padding-top: var(--chatgif-preview-h, 0px) !important;
+.chat-composer__input-container .chat-composer__input {
+  padding-top: 0 !important;
 }
 
 /* Keep thumbnails reasonable on very small screens */
