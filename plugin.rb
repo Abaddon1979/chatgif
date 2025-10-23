@@ -19,8 +19,6 @@ after_initialize do
       # Allow anonymous GET access and no XHR requirement (so fetch works)
       skip_before_action :verify_authenticity_token
       skip_before_action :check_xhr
-      skip_before_action :ensure_logged_in
-      skip_before_action :redirect_to_login_if_required
 
       def search
         api_key = SiteSetting.chatgif_tenor_api_key
