@@ -170,6 +170,8 @@
   border: 0;
   pointer-events: none; // allow typing/caret through overlay
   z-index: 2;
+  max-height: 120px; // cap inline preview size
+  overflow: hidden;  // prevent giant images from expanding the composer
 }
 
 .chat-composer__input-container.chatgif-has-preview .chatgif-inline-preview img {

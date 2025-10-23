@@ -41,20 +41,29 @@ export default {
           }
           // show only the first image URL as a full-width preview (match chat rendering size)
           const u = urls[0];
+
+          // Hide the raw URL in the input so only the image is shown while composing.
+          // We'll re-append it as a markdown image right before sending.
+          if (u && value.includes(u) && inputEl.dataset.chatgifHiddenUrl !== u) {
+            inputEl.dataset.chatgifHiddenUrl = u;
+            inputEl.value = value.replace(u, "").replace(/\s{2,}/g, " ").trimStart();
+          }
+
           const img = document.createElement("img");
           img.src = u;
           img.alt = "preview";
           img.loading = "lazy";
-          // full width like chat; height auto
-          img.style.width = "100%";
-          img.style.height = "auto";
+          // scale preview down in composer (avoid gigantic preview)
+          img.style.maxHeight = "120px";
+          img.style.width = "auto";
+          img.style.maxWidth = "100%";
           // when image loads, measure and push textarea content below so the link isn't visible
           img.addEventListener("load", () => {
             // ensure container is marked so CSS can apply padding
             container.classList.add("chatgif-has-preview");
             // give the browser a tick to layout the image
             requestAnimationFrame(() => {
-              const h = preview.getBoundingClientRect().height || img.naturalHeight || 0;
+              const h = Math.min(preview.getBoundingClientRect().height || img.naturalHeight || 0, 120);
               container.style.setProperty("--chatgif-preview-h", `${Math.max(0, Math.round(h))}px`);
             });
           });
@@ -70,7 +79,7 @@ export default {
         const appendHiddenUrlBeforeSend = () => {
           const hidden = inputEl.dataset.chatgifHiddenUrl;
           if (hidden && !inputEl.value.includes(hidden)) {
-            inputEl.value = `${inputEl.value} ${hidden}`.trim();
+            inputEl.value = `${inputEl.value} ![](${hidden})`.trim();
             inputEl.dispatchEvent(new Event("input", { bubbles: true }));
             delete inputEl.dataset.chatgifHiddenUrl;
           }
@@ -193,7 +202,7 @@ export default {
                     if (textarea) {
                       const gifUrl = gif.media_formats.gif.url;
                       const currentValue = textarea.value;
-                      const newValue = currentValue + ` ${gifUrl} `;
+                      const newValue = currentValue + ` ![](${gifUrl}) `;
                       textarea.value = newValue;
                       textarea.focus();
                       
