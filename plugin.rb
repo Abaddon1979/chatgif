@@ -16,46 +16,48 @@ after_initialize do
   module ::Chatgif
     class TenorController < ::ApplicationController
       requires_plugin "chatgif"
-      skip_before_action :verify_authenticity_token, :check_xhr, :redirect_to_login_if_required
+      # Allow anonymous GET access and no XHR requirement (so fetch works)
+      skip_before_action :verify_authenticity_token
+      skip_before_action :check_xhr
+      skip_before_action :ensure_logged_in
+      skip_before_action :redirect_to_login_if_required
 
       def search
-        render json: { test: "working" }
-        
-        # api_key = SiteSetting.chatgif_tenor_api_key
-        # query = params[:q]
-        # limit = params[:limit] || 10
+        api_key = SiteSetting.chatgif_tenor_api_key
+        query = params[:q].to_s
+        limit = (params[:limit] || 12).to_i
 
-        # if api_key.blank?
-        #   return render json: { error: "Tenor API key not configured" }
-        # end
+        if api_key.blank?
+          render json: { error: "Tenor API key not configured" }, status: 500
+          return
+        end
 
-        # url = "https://tenor.googleapis.com/v2/search"
-        # query_params = {
-        #   q: query,
-        #   key: api_key,
-        #   client_key: "discourse_chatgif",
-        #   limit: limit,
-        #   media_filter: "gif",
-        #   contentfilter: "high"
-        # }
+        url = "https://tenor.googleapis.com/v2/search"
+        query_params = {
+          q: query,
+          key: api_key,
+          client_key: "discourse_chatgif",
+          limit: limit,
+          media_filter: "gif",
+          contentfilter: "high"
+        }
 
-        # begin
-        #   response = Excon.get(url, query: query_params)
-          
-        #   if response.status == 200
-        #     data = JSON.parse(response.body)
-        #     render json: data
-        #   else
-        #     render json: { error: "Failed to fetch GIFs from Tenor API" }
-        #   end
-        # rescue => e
-        #   render json: { error: "Error: #{e.message}" }
-        # end
+        begin
+          response = Excon.get(url, query: query_params)
+          if response.status == 200
+            data = JSON.parse(response.body)
+            render json: data, status: 200
+          else
+            render json: { error: "Failed to fetch GIFs from Tenor API", status: response.status }, status: 500
+          end
+        rescue => e
+          render json: { error: "Error: #{e.message}" }, status: 500
+        end
       end
     end
   end
 
   Discourse::Application.routes.append do
-    get "/chatgif/search" => "chatgif/tenor#search", constraints: { format: :json }
+    get "/chatgif/search" => "chatgif/tenor#search", defaults: { format: :json }
   end
 end

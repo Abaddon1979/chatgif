@@ -1,7 +1,7 @@
 plugins:
   chatgif_tenor_api_key:
     default: ""
-    client: false
+    client: true
   chatgif_enabled:
     default: true
     client: false

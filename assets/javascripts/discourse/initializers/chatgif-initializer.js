@@ -1,11 +1,13 @@
 import { withPluginApi } from "discourse/lib/plugin-api";
 import { action } from "@ember/object";
+import { getURL } from "discourse-common/lib/get-url";
 
 export default {
   name: "chatgif-initializer",
   
   initialize(container) {
     withPluginApi("0.11.7", (api) => {
+      const siteSettings = api.container.lookup("site-settings:main");
       api.registerChatComposerButton({
         id: "chatgif",
         icon: "film",
@@ -55,53 +57,73 @@ export default {
               loadingIndicator.style.display = "block";
               resultsContainer.innerHTML = "";
 
-              fetch(`/chatgif/search?q=${encodeURIComponent(query)}&limit=12`)
-                .then(response => response.json())
-                .then(data => {
-                  loadingIndicator.style.display = "none";
+              const renderError = (msg) => {
+                resultsContainer.innerHTML = `<div class="chatgif-error">${msg}</div>`;
+              };
+
+              const renderResults = (gifs) => {
+                if (!gifs || gifs.length === 0) {
+                  resultsContainer.innerHTML = '<div class="chatgif-no-results">No GIFs found</div>';
+                  return;
+                }
+                gifs.forEach((gif) => {
+                  const gifElement = document.createElement("div");
+                  gifElement.className = "chatgif-item";
+                  gifElement.innerHTML = `
+                    <img src="${gif.media_formats.gif.url}" alt="${gif.content_description}" loading="lazy">
+                  `;
                   
-                  if (data.error) {
-                    resultsContainer.innerHTML = `<div class="chatgif-error">${data.error}</div>`;
-                    return;
-                  }
-
-                  const gifs = data.results || [];
-                  if (gifs.length === 0) {
-                    resultsContainer.innerHTML = '<div class="chatgif-no-results">No GIFs found</div>';
-                    return;
-                  }
-
-                  gifs.forEach(gif => {
-                    const gifElement = document.createElement("div");
-                    gifElement.className = "chatgif-item";
-                    gifElement.innerHTML = `
-                      <img src="${gif.media_formats.gif.url}" alt="${gif.content_description}" loading="lazy">
-                    `;
-                    
-                    gifElement.addEventListener("click", () => {
-                      const textarea = document.querySelector(".chat-composer__input");
-                      if (textarea) {
-                        const gifUrl = gif.media_formats.gif.url;
-                        const currentValue = textarea.value;
-                        const newValue = currentValue + ` ${gifUrl} `;
-                        textarea.value = newValue;
-                        textarea.focus();
-                        
-                        // Trigger input event to update composer state
-                        textarea.dispatchEvent(new Event("input", { bubbles: true }));
-                      }
+                  gifElement.addEventListener("click", () => {
+                    const textarea = document.querySelector(".chat-composer__input");
+                    if (textarea) {
+                      const gifUrl = gif.media_formats.gif.url;
+                      const currentValue = textarea.value;
+                      const newValue = currentValue + ` ${gifUrl} `;
+                      textarea.value = newValue;
+                      textarea.focus();
                       
-                      gifPicker.style.display = "none";
-                      backdrop.classList.remove("visible");
-                    });
-
-                    resultsContainer.appendChild(gifElement);
+                      // Trigger input event to update composer state
+                      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+                    }
+                    
+                    gifPicker.style.display = "none";
+                    backdrop.classList.remove("visible");
                   });
-                })
-                .catch(error => {
-                  loadingIndicator.style.display = "none";
-                  resultsContainer.innerHTML = `<div class="chatgif-error">Failed to load GIFs: ${error.message}</div>`;
+
+                  resultsContainer.appendChild(gifElement);
                 });
+              };
+
+              // Direct Tenor call (avoids server routing issues)
+              const apiKey =
+                (siteSettings && siteSettings.chatgif_tenor_api_key) || "";
+              if (!apiKey) {
+                loadingIndicator.style.display = "none";
+                renderError("Tenor API key not configured. Set it in Admin → Settings → Plugins → chatgif_tenor_api_key");
+                return;
+              }
+
+              const tenorUrl = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(
+                query
+              )}&key=${encodeURIComponent(
+                apiKey
+              )}&client_key=discourse_chatgif&limit=12&media_filter=gif&contentfilter=high`;
+
+              (async () => {
+                try {
+                  const resp = await fetch(tenorUrl);
+                  if (!resp.ok) {
+                    const t = await resp.text();
+                    throw new Error(`Tenor HTTP ${resp.status}: ${t.slice(0, 120)}`);
+                  }
+                  const data = await resp.json();
+                  loadingIndicator.style.display = "none";
+                  renderResults(data.results || []);
+                } catch (e) {
+                  loadingIndicator.style.display = "none";
+                  renderError(`Failed to load GIFs: ${e.message}`);
+                }
+              })();
             };
 
             searchBtn.addEventListener("click", performSearch);
