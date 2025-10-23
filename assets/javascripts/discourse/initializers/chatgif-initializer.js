@@ -57,13 +57,30 @@ export default {
           });
 
           if (isImageLike) {
+            // Helper to hide nearby caret toggles
+            const hideCaret = () => {
+              const maybeCarets = [
+                a.previousElementSibling,
+                a.nextElementSibling,
+                ...(messageEl?.querySelectorAll?.('svg.d-icon-caret-right') || []),
+              ].filter(Boolean);
+              maybeCarets.forEach((el) => {
+                if (el && el.tagName === 'SVG' && el.classList.contains('d-icon-caret-right')) {
+                  el.style.display = 'none';
+                  el.classList.add('chatgif-hidden-caret');
+                }
+              });
+            };
+
             if (imgInside) {
               // Unwrap: keep the image but remove its hyperlink wrapper
               a.replaceWith(imgInside);
+              hideCaret();
             } else if (hasSameImage) {
               // Hide only the hyperlink line if the same image is elsewhere in the message
               a.style.display = 'none';
               a.classList.add('chatgif-hidden-onebox');
+              hideCaret();
             }
           }
         });
@@ -172,13 +189,25 @@ export default {
           inputEl.value = [textOnly, rawUrls].filter(Boolean).join(textOnly ? "\n" : "");
           inputEl.dispatchEvent(new Event("input", { bubbles: true }));
 
-          delete inputEl.dataset.chatgifHiddenUrl;
+          // Immediately send to avoid a visible intermediate "link text" state in the composer
+          const composerRootEl = container.closest(".chat-composer__inner-container");
+          const sendBtnEl = composerRootEl?.querySelector(".chat-composer-button.-send");
+          if (sendBtnEl) {
+            setTimeout(() => {
+              try {
+                sendBtnEl.click();
+              } catch (_e) {}
+            }, 0);
+          }
 
-          // clear preview state
-          preview.style.display = "none";
-          preview.innerHTML = "";
-          container.classList.remove("chatgif-has-preview");
-          container.style.removeProperty("--chatgif-preview-h");
+          // Defer clearing preview so user doesn't see link text flicker before post
+          setTimeout(() => {
+            delete inputEl.dataset.chatgifHiddenUrl;
+            preview.style.display = "none";
+            preview.innerHTML = "";
+            container.classList.remove("chatgif-has-preview");
+            container.style.removeProperty("--chatgif-preview-h");
+          }, 300);
         };
 
         // handle Enter to send (without Shift)
