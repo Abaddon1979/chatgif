@@ -41,13 +41,19 @@ To use this plugin, you need a Tenor API key:
 
 ```
 chatgif/
-├── plugin.rb                 # Main plugin file
+├── plugin.rb                                      # Main plugin file
 ├── assets/
 │   ├── javascripts/
-│   │   └── chatgif.js       # Frontend JavaScript
+│   │   └── discourse/
+│   │       └── initializers/
+│   │           └── chatgif-initializer.js        # Frontend JavaScript
 │   └── stylesheets/
-│       └── chatgif.scss     # Styling
-└── README.md                # This file
+│       └── chatgif.scss                          # Styling
+├── config/
+│   ├── settings.yml                              # Plugin settings
+│   └── locales/
+│       └── client.en.yml                         # English translations
+└── README.md                                      # This file
 ```
 
 ## API Endpoints
