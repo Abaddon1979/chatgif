@@ -390,85 +390,126 @@ export default {
             const searchBtn = gifPicker.querySelector(".chatgif-search-btn");
             const resultsContainer = gifPicker.querySelector(".chatgif-results");
             const loadingIndicator = gifPicker.querySelector(".chatgif-loading");
+            // live search + infinite scroll state
+            let currentQuery = "";
+            let nextPos = "";
+            let loading = false;
+            let abortController = null;
+            const debounce = (fn, wait = 300) => {
+              let t;
+              return (...args) => {
+                clearTimeout(t);
+                t = setTimeout(() => fn(...args), wait);
+              };
+            };
 
-            const performSearch = () => {
+            // Live search with debounce and infinite scroll using Tenor v2 "pos" cursor
+            const performSearch = async (append = false) => {
               const query = searchInput.value.trim();
-              if (!query) return;
+              if (!query) {
+                if (!append) {
+                  resultsContainer.innerHTML = "";
+                  nextPos = "";
+                }
+                loadingIndicator.style.display = "none";
+                return;
+              }
+              // reset state for new query
+              if (!append || query !== currentQuery) {
+                currentQuery = query;
+                nextPos = "";
+                resultsContainer.innerHTML = "";
+              }
+              // cancel previous in-flight request
+              try {
+                abortController?.abort();
+              } catch (_e) {}
+              abortController = new AbortController();
 
+              loading = true;
               loadingIndicator.style.display = "block";
-              resultsContainer.innerHTML = "";
 
               const renderError = (msg) => {
-                resultsContainer.innerHTML = `<div class="chatgif-error">${msg}</div>`;
-              };
-
-              const renderResults = (gifs) => {
-                if (!gifs || gifs.length === 0) {
-                  resultsContainer.innerHTML = '<div class="chatgif-no-results">No GIFs found</div>';
-                  return;
+                if (!append) {
+                  resultsContainer.innerHTML = `<div class="chatgif-error">${msg}</div>`;
                 }
-                gifs.forEach((gif) => {
-                  const gifElement = document.createElement("div");
-                  gifElement.className = "chatgif-item";
-                  gifElement.innerHTML = `
-                    <img src="${gif.media_formats.gif.url}" alt="${gif.content_description}" loading="lazy">
-                  `;
-                  
-                  gifElement.addEventListener("click", () => {
-                    const textarea = document.querySelector(".chat-composer__input");
-                    if (textarea) {
-                      const gifUrl = gif.media_formats.gif.url;
-                      // do not insert visible text; store URL for preview and send
-                      textarea.dataset.chatgifHiddenUrl = gifUrl;
-                      // trigger preview update
-                      textarea.dispatchEvent(new Event("input", { bubbles: true }));
-                      textarea.focus();
-                    }
-                    
-                    gifPicker.style.display = "none";
-                    backdrop.classList.remove("visible");
-                  });
-
-                  resultsContainer.appendChild(gifElement);
-                });
               };
 
-              // Direct Tenor call (avoids server routing issues)
-              const apiKey =
-                (siteSettings && siteSettings.chatgif_tenor_api_key) || "";
+              const apiKey = (siteSettings && siteSettings.chatgif_tenor_api_key) || "";
               if (!apiKey) {
+                loading = false;
                 loadingIndicator.style.display = "none";
                 renderError("Tenor API key not configured. Set it in Admin → Settings → Plugins → chatgif_tenor_api_key");
                 return;
               }
 
-              const tenorUrl = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(
+              const baseUrl = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(
                 query
-              )}&key=${encodeURIComponent(
-                apiKey
-              )}&client_key=discourse_chatgif&limit=12&media_filter=gif&contentfilter=high`;
+              )}&key=${encodeURIComponent(apiKey)}&client_key=discourse_chatgif&limit=24&media_filter=gif&contentfilter=high`;
+              const url = append && nextPos ? `${baseUrl}&pos=${encodeURIComponent(nextPos)}` : baseUrl;
 
-              (async () => {
-                try {
-                  const resp = await fetch(tenorUrl);
-                  if (!resp.ok) {
-                    const t = await resp.text();
-                    throw new Error(`Tenor HTTP ${resp.status}: ${t.slice(0, 120)}`);
-                  }
-                  const data = await resp.json();
-                  loadingIndicator.style.display = "none";
-                  renderResults(data.results || []);
-                } catch (e) {
+              try {
+                const resp = await fetch(url, { signal: abortController.signal });
+                if (!resp.ok) {
+                  const t = await resp.text();
+                  throw new Error(`Tenor HTTP ${resp.status}: ${t.slice(0, 120)}`);
+                }
+                const data = await resp.json();
+                loadingIndicator.style.display = "none";
+                const gifs = data.results || [];
+                if (!append && gifs.length === 0) {
+                  resultsContainer.innerHTML = '<div class="chatgif-no-results">No GIFs found</div>';
+                } else {
+                  gifs.forEach((gif) => {
+                    const gifElement = document.createElement("div");
+                    gifElement.className = "chatgif-item";
+                    gifElement.innerHTML = `
+                      <img src="${gif.media_formats.gif.url}" alt="${gif.content_description}" loading="lazy">
+                    `;
+                    gifElement.addEventListener("click", () => {
+                      const textarea = document.querySelector(".chat-composer__input");
+                      if (textarea) {
+                        const gifUrl = gif.media_formats.gif.url;
+                        // do not insert visible text; store URL for preview and send
+                        textarea.dataset.chatgifHiddenUrl = gifUrl;
+                        // trigger preview update
+                        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+                        textarea.focus();
+                      }
+                      gifPicker.style.display = "none";
+                      backdrop.classList.remove("visible");
+                    });
+                    resultsContainer.appendChild(gifElement);
+                  });
+                }
+                nextPos = data.next || "";
+              } catch (e) {
+                if (e?.name === "AbortError") {
+                  // ignore aborted requests
+                } else {
                   loadingIndicator.style.display = "none";
                   renderError(`Failed to load GIFs: ${e.message}`);
                 }
-              })();
+              } finally {
+                loading = false;
+              }
             };
 
-            searchBtn.addEventListener("click", performSearch);
+            searchBtn.addEventListener("click", () => performSearch(false));
             searchInput.addEventListener("keypress", (e) => {
               if (e.key === "Enter") {
-                performSearch();
+                performSearch(false);
+              }
+            });
+            // Live search as you type (Discord-like)
+            searchInput.addEventListener("input", debounce(() => performSearch(false), 300));
+            // Infinite scroll: load more when nearing bottom
+            resultsContainer.addEventListener("scroll", () => {
+              const nearBottom =
+                resultsContainer.scrollTop + resultsContainer.clientHeight >=
+                resultsContainer.scrollHeight - 100;
+              if (nearBottom && !loading && nextPos) {
+                performSearch(true);
               }
             });
 
