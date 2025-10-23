@@ -8,6 +8,72 @@ export default {
   initialize(container) {
     withPluginApi("0.11.7", (api) => {
       const siteSettings = api.container.lookup("site-settings:main");
+
+      // Inline image preview for image URLs typed into the chat composer
+      const attachPreviewToComposer = (inputEl) => {
+        if (!inputEl || inputEl.dataset.chatgifPreviewAttached) return;
+        inputEl.dataset.chatgifPreviewAttached = "true";
+
+        const container = inputEl.closest(".chat-composer__input-container");
+        if (!container) return;
+
+        let preview = container.querySelector(".chatgif-inline-preview");
+        if (!preview) {
+          preview = document.createElement("div");
+          preview.className = "chatgif-inline-preview";
+          preview.style.display = "none";
+          container.appendChild(preview);
+        }
+
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        const isImageUrl = (u) => /\.(gif|png|jpe?g|webp)(\?.*)?$/i.test(u);
+
+        const updatePreview = () => {
+          const value = inputEl.value || "";
+          const urls = (value.match(urlRegex) || []).filter(isImageUrl);
+          preview.innerHTML = "";
+          if (urls.length === 0) {
+            preview.style.display = "none";
+            return;
+          }
+          urls.slice(0, 3).forEach((u) => {
+            const img = document.createElement("img");
+            img.src = u;
+            img.alt = "preview";
+            img.loading = "lazy";
+            preview.appendChild(img);
+          });
+          preview.style.display = "flex";
+        };
+
+        inputEl.addEventListener("input", updatePreview);
+        inputEl.addEventListener("paste", () => setTimeout(updatePreview, 0));
+        updatePreview();
+      };
+
+      // Attach to existing and future chat composers
+      const initExistingInputs = () => {
+        document
+          .querySelectorAll(".chat-composer__input")
+          .forEach((el) => attachPreviewToComposer(el));
+      };
+      initExistingInputs();
+
+      const mo = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          for (const node of m.addedNodes || []) {
+            if (!(node instanceof HTMLElement)) continue;
+            if (node.matches && node.matches(".chat-composer__input")) {
+              attachPreviewToComposer(node);
+            }
+            node
+              .querySelectorAll?.(".chat-composer__input")
+              .forEach((el) => attachPreviewToComposer(el));
+          }
+        }
+      });
+      mo.observe(document.body, { childList: true, subtree: true });
+
       api.registerChatComposerButton({
         id: "chatgif",
         icon: "film",

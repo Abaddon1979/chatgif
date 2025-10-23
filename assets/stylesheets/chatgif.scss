@@ -136,6 +136,32 @@
   z-index: 1100;
 }
 
+.chatgif-inline-preview {
+  display: none; /* toggled to flex by JS when URLs are detected */
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--primary-low);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.chatgif-inline-preview img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Keep thumbnails reasonable on very small screens */
+@media (max-width: 480px) {
+  .chatgif-inline-preview img {
+    width: 56px;
+    height: 56px;
+  }
+}
+
 // Responsive adjustments
 @media (max-width: 768px) {
   .chatgif-picker {
