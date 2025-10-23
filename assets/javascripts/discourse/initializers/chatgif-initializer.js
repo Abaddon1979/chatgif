@@ -191,8 +191,8 @@ export default {
           // guard against double-sends from re-entrant Enter/Click handling
           if (inputEl.dataset.chatgifSendingNow === "1") return;
           inputEl.dataset.chatgifSendingNow = "1";
-          // avoid visual flicker; do not alter composer text visibility during send
-          // container.classList.add("chatgif-sending");
+          // temporarily hide composer text during send prep to avoid visible URL flicker
+          container.classList.add("chatgif-sending");
           const hidden = inputEl.dataset.chatgifHiddenUrl;
           const urlRegex = /(https?:\/\/[^\s]+)/g;
           const isImageUrl = (u) => /\.(gif|png|jpe?g|webp)(\?.*)?$/i.test(u);
