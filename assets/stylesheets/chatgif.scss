@@ -162,7 +162,11 @@
 
 .chat-composer__input-container .chatgif-inline-preview {
   position: static;
-  display: block;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: flex-start;
+  text-align: left;
   max-height: 120px;
   overflow: hidden;
   pointer-events: auto;
@@ -179,6 +183,13 @@
 
 .chat-composer__input-container .chat-composer__input {
   padding-top: 0 !important;
+}
+
+.chat-composer__input-container.chatgif-sending .chat-composer__input {
+  /* Hide any transient URL text during send prep to avoid flicker */
+  color: transparent !important;
+  caret-color: transparent !important;
+  text-shadow: none !important;
 }
 
 /* Keep thumbnails reasonable on very small screens */

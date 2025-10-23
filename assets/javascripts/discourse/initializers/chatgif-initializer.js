@@ -85,11 +85,18 @@ export default {
           }
         });
         
-        // Also hide carets in messages where a link line has been hidden
+        // Also hide carets for GIF/image messages (remove collapse toggle but keep image)
         const carets = Array.from(root.querySelectorAll?.('svg.d-icon-caret-right') || []);
         carets.forEach((svg) => {
           const msg = svg.closest('.chat-message, .chat-message-container, .chat-message-text, .message, .tc-message, .cooked');
-          if (msg && msg.querySelector('a.chatgif-hidden-onebox')) {
+          if (!msg) return;
+          const hasHiddenOnebox = !!msg.querySelector('a.chatgif-hidden-onebox');
+          const imgs = Array.from(msg.querySelectorAll('img[src]') || []);
+          const hasGifLikeImg = imgs.some((img) => {
+            const src = img.getAttribute('src') || '';
+            return /\.gif(\?.*)?$/i.test(src) || /tenor|giphy/i.test(src);
+          });
+          if (hasHiddenOnebox || hasGifLikeImg) {
             svg.style.display = 'none';
             svg.classList.add('chatgif-hidden-caret');
           }
@@ -180,7 +187,9 @@ export default {
 
         // before sending, re-append hidden URL so message contains the image link
         const appendHiddenUrlBeforeSend = (opts = {}) => {
-          const { triggerSendClick = false } = opts;
+          const { triggerSendClick = false, triggerKeyEnter = false } = opts;
+          // hide composer text during the brief send preparation so URL isn't visible
+          container.classList.add("chatgif-sending");
           const hidden = inputEl.dataset.chatgifHiddenUrl;
           const urlRegex = /(https?:\/\/[^\s]+)/g;
           const isImageUrl = (u) => /\.(gif|png|jpe?g|webp)(\?.*)?$/i.test(u);
@@ -198,14 +207,31 @@ export default {
           const rawUrls = all.join("\n");
           inputEl.value = [textOnly, rawUrls].filter(Boolean).join(textOnly ? "\n" : "");
           inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+          if (triggerKeyEnter) {
+            // Mark to bypass our handler once so chat's native Enter handler will send
+            inputEl.dataset.chatgifDispatchingEnter = "1";
+            const ev = new KeyboardEvent("keydown", { key: "Enter", bubbles: true });
+            inputEl.dispatchEvent(ev);
+          }
 
           // Immediately send to avoid a visible intermediate "link text" state in the composer
-          const composerRootEl = container.closest(".chat-composer__inner-container");
-          const sendBtnEl = composerRootEl?.querySelector(".chat-composer-button.-send");
-          if (triggerSendClick && sendBtnEl) {
+          const composerRootEl = container.closest(".chat-composer__inner-container") || document;
+          let sendBtnEl = composerRootEl.querySelector(".chat-composer-button.-send, button[aria-label='Send'], button[title='Send'], .chat-composer__send-button, .tc-composer__send, button[type='submit']");
+          if (triggerSendClick) {
             setTimeout(() => {
               try {
-                sendBtnEl.click();
+                if (sendBtnEl) {
+                  sendBtnEl.click();
+                } else {
+                  const formEl = container.closest("form");
+                  if (formEl) {
+                    if (typeof formEl.requestSubmit === "function") {
+                      formEl.requestSubmit();
+                    } else {
+                      formEl.submit();
+                    }
+                  }
+                }
               } catch (_e) {}
             }, 0);
           }
@@ -216,19 +242,27 @@ export default {
             preview.style.display = "none";
             preview.innerHTML = "";
             container.classList.remove("chatgif-has-preview");
+            container.classList.remove("chatgif-sending");
             container.style.removeProperty("--chatgif-preview-h");
           }, 300);
         };
 
         // handle Enter to send (without Shift). Prevent default only when we have a GIF URL to send.
         inputEl.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
-            const current = inputEl.value || "";
-            const urls = (current.match(urlRegex) || []).filter(isImageUrl);
-            if (inputEl.dataset.chatgifHiddenUrl || urls.length) {
-              e.preventDefault();
-              e.stopPropagation();
-              appendHiddenUrlBeforeSend({ triggerSendClick: true });
+          if (e.key === "Enter") {
+            // Allow one re-dispatched Enter to pass through native handler
+            if (inputEl.dataset.chatgifDispatchingEnter === "1") {
+              delete inputEl.dataset.chatgifDispatchingEnter;
+              return; // do not prevent; let native send happen
+            }
+            if (!e.shiftKey && !e.isComposing) {
+              const current = inputEl.value || "";
+              const urls = (current.match(urlRegex) || []).filter(isImageUrl);
+              if (inputEl.dataset.chatgifHiddenUrl || urls.length) {
+                e.preventDefault();
+                e.stopPropagation();
+                appendHiddenUrlBeforeSend({ triggerSendClick: false, triggerKeyEnter: true });
+              }
             }
           }
         });
