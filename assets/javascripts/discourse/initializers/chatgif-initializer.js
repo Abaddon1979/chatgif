@@ -9,6 +9,34 @@ export default {
     withPluginApi("0.11.7", (api) => {
       const siteSettings = api.container.lookup("site-settings:main");
 
+      // Hide duplicate link previews when a oneboxed link is followed by the same image.
+      // This removes the top hyperlink (anchor.onebox) and keeps just the image.
+      const processChatForDuplicateLinkPreviews = (root = document) => {
+        const anchors = root.querySelectorAll?.('a.onebox[href]') || [];
+        anchors.forEach((a) => {
+          const href = a.getAttribute('href') || '';
+          const isImageLike =
+            /\.(gif|png|jpe?g|webp)(\?.*)?$/i.test(href) ||
+            href.includes('tenor.com') ||
+            href.includes('giphy.com') ||
+            href.includes('media.tenor.com') ||
+            href.includes('media.giphy.com');
+
+          // If the next sibling is an image, hide only the hyperlink (keep the image visible)
+          const imgInside = a.querySelector('img');
+          const next = a.nextElementSibling;
+          const nextIsImg = next && next.tagName === 'IMG';
+
+          if (isImageLike && !imgInside && nextIsImg) {
+            a.style.display = 'none';
+            a.classList.add('chatgif-hidden-onebox');
+          }
+        });
+      };
+
+      // Run once at startup in case messages are already present
+      processChatForDuplicateLinkPreviews(document);
+
       // Inline image preview for image URLs typed into the chat composer
       const attachPreviewToComposer = (inputEl) => {
         if (!inputEl || inputEl.dataset.chatgifPreviewAttached) return;
@@ -91,7 +119,7 @@ export default {
           // strip all raw URLs from the text so no link gets posted
           let textOnly = current.replace(urlRegex, "").replace(/\s{2,}/g, " ").trim();
 
-          // re-build message with ONLY markdown images (no raw links)
+          // Rebuild message using ONLY markdown images so chat renders image-only without a separate link.
           const md = all.map((u) => `![](${u})`).join("\n");
           inputEl.value = [textOnly, md].filter(Boolean).join(textOnly ? "\n" : "");
           inputEl.dispatchEvent(new Event("input", { bubbles: true }));
@@ -142,6 +170,9 @@ export default {
             node
               .querySelectorAll?.(".chat-composer__input")
               .forEach((el) => attachPreviewToComposer(el));
+
+            // Clean up duplicate link + image combos in newly added chat content
+            processChatForDuplicateLinkPreviews(node);
           }
         }
       });
