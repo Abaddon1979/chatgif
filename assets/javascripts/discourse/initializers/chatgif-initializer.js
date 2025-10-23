@@ -31,22 +31,24 @@ export default {
         const updatePreview = () => {
           const value = inputEl.value || "";
           const urls = (value.match(urlRegex) || []).filter(isImageUrl);
+          const candidate = inputEl.dataset.chatgifHiddenUrl || urls[0];
+
           preview.innerHTML = "";
-          if (urls.length === 0) {
+          if (!candidate) {
             preview.style.display = "none";
             // remove padding shift when no preview
             container.classList.remove("chatgif-has-preview");
             container.style.removeProperty("--chatgif-preview-h");
             return;
           }
-          // show only the first image URL as a full-width preview (match chat rendering size)
-          const u = urls[0];
+          // show only the chosen image URL (hidden or first detected)
+          const u = candidate;
 
           // Hide the raw URL in the input so only the image is shown while composing.
-          // We'll re-append it as a markdown image right before sending.
-          if (u && value.includes(u) && inputEl.dataset.chatgifHiddenUrl !== u) {
-            inputEl.dataset.chatgifHiddenUrl = u;
-            inputEl.value = value.replace(u, "").replace(/\s{2,}/g, " ").trimStart();
+          // We'll convert to markdown image right before sending.
+          if (urls[0] && value.includes(urls[0]) && inputEl.dataset.chatgifHiddenUrl !== urls[0]) {
+            inputEl.dataset.chatgifHiddenUrl = urls[0];
+            inputEl.value = value.replace(urls[0], "").replace(/\s{2,}/g, " ").trimStart();
           }
 
           const img = document.createElement("img");
@@ -78,11 +80,24 @@ export default {
         // before sending, re-append hidden URL so message contains the image link
         const appendHiddenUrlBeforeSend = () => {
           const hidden = inputEl.dataset.chatgifHiddenUrl;
-          if (hidden && !inputEl.value.includes(hidden)) {
-            inputEl.value = `${inputEl.value} ![](${hidden})`.trim();
-            inputEl.dispatchEvent(new Event("input", { bubbles: true }));
-            delete inputEl.dataset.chatgifHiddenUrl;
-          }
+          const urlRegex = /(https?:\/\/[^\s]+)/g;
+          const isImageUrl = (u) => /\.(gif|png|jpe?g|webp)(\?.*)?$/i.test(u);
+
+          const current = inputEl.value || "";
+          // collect all image URLs currently in the text plus the hidden one
+          const foundUrls = (current.match(urlRegex) || []).filter(isImageUrl);
+          const all = Array.from(new Set([...(hidden ? [hidden] : []), ...foundUrls]));
+
+          // strip all raw URLs from the text so no link gets posted
+          let textOnly = current.replace(urlRegex, "").replace(/\s{2,}/g, " ").trim();
+
+          // re-build message with ONLY markdown images (no raw links)
+          const md = all.map((u) => `![](${u})`).join("\n");
+          inputEl.value = [textOnly, md].filter(Boolean).join(textOnly ? "\n" : "");
+          inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+
+          delete inputEl.dataset.chatgifHiddenUrl;
+
           // clear preview state
           preview.style.display = "none";
           preview.innerHTML = "";
@@ -201,13 +216,11 @@ export default {
                     const textarea = document.querySelector(".chat-composer__input");
                     if (textarea) {
                       const gifUrl = gif.media_formats.gif.url;
-                      const currentValue = textarea.value;
-                      const newValue = currentValue + ` ![](${gifUrl}) `;
-                      textarea.value = newValue;
-                      textarea.focus();
-                      
-                      // Trigger input event to update composer state
+                      // do not insert visible text; store URL for preview and send
+                      textarea.dataset.chatgifHiddenUrl = gifUrl;
+                      // trigger preview update
                       textarea.dispatchEvent(new Event("input", { bubbles: true }));
+                      textarea.focus();
                     }
                     
                     gifPicker.style.display = "none";
