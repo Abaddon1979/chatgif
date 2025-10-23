@@ -9,10 +9,24 @@ export default {
     withPluginApi("0.11.7", (api) => {
       const siteSettings = api.container.lookup("site-settings:main");
 
+      // Normalize URL path (ignore host and trailing slashes) for robust comparisons
+      const normalizePath = (u) => {
+        try {
+          const url = new URL(u, window.location.origin);
+          return url.pathname.replace(/\/+$/, "");
+        } catch (_e) {
+          return (u || "").replace(/https?:\/\/[^/]+/, "").replace(/\/+$/, "");
+        }
+      };
+
       // Hide duplicate link previews when a oneboxed link is followed by the same image.
       // This removes the top hyperlink (anchor.onebox) and keeps just the image.
       const processChatForDuplicateLinkPreviews = (root = document) => {
-        const anchors = root.querySelectorAll?.('a.onebox[href]') || [];
+        const anchors = Array.from(
+          root.querySelectorAll?.(
+            '.chat-message a[href], .chat-message-container a[href], .tc-message a[href], .cooked a[href], a.onebox[href]'
+          ) || []
+        );
         anchors.forEach((a) => {
           const href = a.getAttribute('href') || '';
           const isImageLike =
@@ -22,14 +36,35 @@ export default {
             href.includes('media.tenor.com') ||
             href.includes('media.giphy.com');
 
-          // If the next sibling is an image, hide only the hyperlink (keep the image visible)
           const imgInside = a.querySelector('img');
-          const next = a.nextElementSibling;
-          const nextIsImg = next && next.tagName === 'IMG';
 
-          if (isImageLike && !imgInside && nextIsImg) {
-            a.style.display = 'none';
-            a.classList.add('chatgif-hidden-onebox');
+          // Try to scope to a single chat message container
+          const messageEl =
+            a.closest('.chat-message, .chat-message-container, .chat-message-text, .message, .tc-message, .cooked') || a.parentElement;
+
+          // Find any image in the same message and compare normalized paths
+          const imgsInMsg = Array.from(messageEl?.querySelectorAll?.('img[src]') || []);
+          const hrefPath = normalizePath(href);
+          const hasSameImage = imgsInMsg.some((img) => {
+            const src = img.getAttribute('src') || '';
+            const srcPath = normalizePath(src);
+            return (
+              src === href ||
+              srcPath === hrefPath ||
+              srcPath.endsWith(hrefPath) ||
+              hrefPath.endsWith(srcPath)
+            );
+          });
+
+          if (isImageLike) {
+            if (imgInside) {
+              // Unwrap: keep the image but remove its hyperlink wrapper
+              a.replaceWith(imgInside);
+            } else if (hasSameImage) {
+              // Hide only the hyperlink line if the same image is elsewhere in the message
+              a.style.display = 'none';
+              a.classList.add('chatgif-hidden-onebox');
+            }
           }
         });
       };
@@ -57,7 +92,19 @@ export default {
         const isImageUrl = (u) => /\.(gif|png|jpe?g|webp)(\?.*)?$/i.test(u);
 
         const updatePreview = () => {
-          const value = inputEl.value || "";
+          let value = inputEl.value || "";
+
+          // If markdown image token is present, strip it and keep URL hidden for preview/sending
+          const mdMatch = value.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/);
+          if (mdMatch && mdMatch[1]) {
+            inputEl.dataset.chatgifHiddenUrl = mdMatch[1];
+            value = value
+              .replace(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/g, "")
+              .replace(/\s{2,}/g, " ")
+              .trimStart();
+            inputEl.value = value;
+          }
+
           const urls = (value.match(urlRegex) || []).filter(isImageUrl);
           const candidate = inputEl.dataset.chatgifHiddenUrl || urls[0];
 
@@ -119,9 +166,10 @@ export default {
           // strip all raw URLs from the text so no link gets posted
           let textOnly = current.replace(urlRegex, "").replace(/\s{2,}/g, " ").trim();
 
-          // Rebuild message using ONLY markdown images so chat renders image-only without a separate link.
-          const md = all.map((u) => `![](${u})`).join("\n");
-          inputEl.value = [textOnly, md].filter(Boolean).join(textOnly ? "\n" : "");
+          // Rebuild message using ONLY raw image URLs so chat oneboxes to an image.
+          // The UI hook will hide the separate hyperlink line if an image follows.
+          const rawUrls = all.join("\n");
+          inputEl.value = [textOnly, rawUrls].filter(Boolean).join(textOnly ? "\n" : "");
           inputEl.dispatchEvent(new Event("input", { bubbles: true }));
 
           delete inputEl.dataset.chatgifHiddenUrl;
