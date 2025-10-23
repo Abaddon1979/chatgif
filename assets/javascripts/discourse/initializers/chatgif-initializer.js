@@ -208,32 +208,40 @@ export default {
           inputEl.value = [textOnly, rawUrls].filter(Boolean).join(textOnly ? "\n" : "");
           inputEl.dispatchEvent(new Event("input", { bubbles: true }));
           if (triggerKeyEnter) {
-            // Mark to bypass our handler once so chat's native Enter handler will send
-            inputEl.dataset.chatgifDispatchingEnter = "1";
-            const ev = new KeyboardEvent("keydown", { key: "Enter", bubbles: true });
-            inputEl.dispatchEvent(ev);
+            // Let Ember binding update settle before letting native Enter send
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                inputEl.dataset.chatgifDispatchingEnter = "1";
+                const ev = new KeyboardEvent("keydown", { key: "Enter", bubbles: true });
+                inputEl.dispatchEvent(ev);
+              });
+            });
           }
 
           // Immediately send to avoid a visible intermediate "link text" state in the composer
           const composerRootEl = container.closest(".chat-composer__inner-container") || document;
           let sendBtnEl = composerRootEl.querySelector(".chat-composer-button.-send, button[aria-label='Send'], button[title='Send'], .chat-composer__send-button, .tc-composer__send, button[type='submit']");
           if (triggerSendClick) {
-            setTimeout(() => {
-              try {
-                if (sendBtnEl) {
-                  sendBtnEl.click();
-                } else {
-                  const formEl = container.closest("form");
-                  if (formEl) {
-                    if (typeof formEl.requestSubmit === "function") {
-                      formEl.requestSubmit();
-                    } else {
-                      formEl.submit();
+            // ensure bound value propagates before send
+            inputEl.dispatchEvent(new Event("change", { bubbles: true }));
+            requestAnimationFrame(() => {
+              setTimeout(() => {
+                try {
+                  if (sendBtnEl) {
+                    sendBtnEl.click();
+                  } else {
+                    const formEl = container.closest("form");
+                    if (formEl) {
+                      if (typeof formEl.requestSubmit === "function") {
+                        formEl.requestSubmit();
+                      } else {
+                        formEl.submit();
+                      }
                     }
                   }
-                }
-              } catch (_e) {}
-            }, 0);
+                } catch (_e) {}
+              }, 30);
+            });
           }
 
           // Defer clearing preview so user doesn't see link text flicker before post
@@ -247,23 +255,21 @@ export default {
           }, 300);
         };
 
-        // handle Enter to send (without Shift). Prevent default only when we have a GIF URL to send.
+        // handle Enter to send (without Shift). Re-dispatch native Enter after injecting GIF URL.
         inputEl.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") {
-            // Allow one re-dispatched Enter to pass through native handler
-            if (inputEl.dataset.chatgifDispatchingEnter === "1") {
-              delete inputEl.dataset.chatgifDispatchingEnter;
-              return; // do not prevent; let native send happen
+          if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+            const current = inputEl.value || "";
+            const urls = (current.match(urlRegex) || []).filter(isImageUrl);
+            if (inputEl.dataset.chatgifHiddenUrl || urls.length) {
+              e.preventDefault();
+              e.stopPropagation();
+              appendHiddenUrlBeforeSend({ triggerSendClick: false, triggerKeyEnter: true });
+              return;
             }
-            if (!e.shiftKey && !e.isComposing) {
-              const current = inputEl.value || "";
-              const urls = (current.match(urlRegex) || []).filter(isImageUrl);
-              if (inputEl.dataset.chatgifHiddenUrl || urls.length) {
-                e.preventDefault();
-                e.stopPropagation();
-                appendHiddenUrlBeforeSend({ triggerSendClick: false, triggerKeyEnter: true });
-              }
-            }
+          }
+          if (e.key === "Enter" && inputEl.dataset.chatgifDispatchingEnter === "1") {
+            // allow the one re-dispatched Enter through
+            delete inputEl.dataset.chatgifDispatchingEnter;
           }
         });
 
